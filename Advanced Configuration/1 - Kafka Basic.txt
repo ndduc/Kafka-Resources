@@ -1,0 +1,28 @@
+Topic replication factor
+	- replication factor should be > 1 (usually between 2 and 3)
+	- If one broker is down, another can serve the data
+	
+Concept of Leader for a partition
+	- At anytime only one brokder can be a leader for a given parition
+	- Producer can only send data to the broker that is leader of a partition
+	- The other broker will replicate the data
+	- Each Parittion has one in sync leader and multiple in sync replicas
+
+Default procuder and consumer behavior with LEADERS
+	- Kafka producer can only write to the leader broker for a partition
+	- Kafka consumer by default will read from the leader broker for a partition
+	
+Kafka Cconsumer replica Fetching (v2.4+)
+	- it is possible to config consumer to read from the closet replica
+	- Improve latency and decrease network cost if using cloud
+	
+Product Acknowledgement (ACKs)
+	- Procuder can choose to receive acknowledment of data write
+		- acks = 0; produce wont wait for acknowledment (possible data loss)
+		- acks = 1; producer wait for leader ack (limited data loss)
+		- acks = all; leader + replicas acknowledment (no data loss)
+		
+Kafka Topic Durability
+	- Topic with replication factor of 3 -> can withstand 2 broker loss
+	- Common rule for replication factor
+		- You can permanently lose up to N-1 broker and still recover your data

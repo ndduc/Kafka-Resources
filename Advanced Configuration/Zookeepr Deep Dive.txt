@@ -1,0 +1,50 @@
+Zookeepr Quorum Sizing
+	- Sizing has to be 1, 3, 5, 7, 9, or (2N+1)
+	- This would  allow for 0, 1, 2, 3, 4, or N server to go down accordingly
+	- In DEV env, there could be 1 server, but in PROD env there should never be 1 server - at least 3, which we would allow 1 server to go down
+	- Scenario
+		- 1 server	
+			- pro:
+				- Fast to put in place
+				- Fast to make decision
+			- cons:
+				- Not resilient
+				- Not distributed
+		- 3 servers
+			- pros:
+				- Distributed
+				- Preferred for small Kafka deployment
+			- cons:
+				- only one server can go down
+		- 5 servers
+			- pros:
+				- Used for big Kafka deployment (NETFLIX)
+				- Two server can go down
+			- cons:
+				- Need performant machine
+		- more than 5 server
+			- pros:
+				- more than 2 servers can go down
+			- cons:
+				- Network overhead and lag could affect zookeepr performance
+
+Configuration
+	- zookeeper.properties
+		- dataDir: location where zookeeper store data and config
+		- tickTime (2000): time unit used by zookeeper. Used to do heartbeat and the minimum session timeout will be twice the tickTime
+		- initLimit (10): number of ticks that the initial synchronization phase can take
+		- syncLimit (5): number of tick that can pass between sending a request and getting an ack
+		
+Zookeeper performance
+	- Latency is a key
+	- Fast disk (SSD)
+	- No RAM swap
+	- Separate disk for snapshot and logs
+	- High perform network (low latency)
+	- Reasonable number of zookeeper server
+	- isolation of zookeeper instances from other processes
+	
+Zookeeper management toool
+	- Zookeeper ui web
+	- Zookeeper GUI (desktop)
+	- ZooNavigator (newest)

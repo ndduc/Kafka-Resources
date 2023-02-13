@@ -1,0 +1,144 @@
+Set topic configuration
+- Topic Creation
+	- kafka-topic --create --bootstrap-server localhost:9092 --topic my-topic-name --replication-factor 1 --partitions 3
+
+- Get Topic Config
+	- kafka-topic --bootstrap-server localhost:9092 --topic my-topic-name --describe
+	- kafka-configs
+		- Get all configurable configuration
+
+- Describe Topic Config
+	- kafka-configs --bootstrap-server localhost:9092 --entity-type topics --entity-name my-topic-name --describe
+	
+- Add config to topic
+	- kafka-configs --bootstrap-server localhost:9092 --entity-type topics --entity-name my-topic-name --alter --add-config min.insync.replicas=2
+	
+- Delete config
+	- kafka-configs --bootstrap-server localhost:9092 --entity-type topics --entity-name my-topic-name --alter --delete-config min.insync.replicas
+	
+	
+Partition and Segment
+- Topics are made of partitions
+- Partitions are made of segments
+	- Last segment calls active segment
+	- Only one segment is ACTIVE (one daata is being written to)
+	- Segment settings
+		- log.segment.bytes: the max size of a single segment in bytes (default 1GB)
+		- log.segment.ms: the time Kafka will wait before committing the segment if not null (default 1 week)
+			- Ex: if reached 1 week but segment has not reached 1 gb - kafka will close the segment
+
+Segment and Index
+- Segment comes with 2 indexes (files)
+	- Offsets to position index: help kafka find where to read from to find a message
+	- A Timestamp to offset index: help kafka find messsage with a specific timestamp
+	
+Why segment matter?
+- A smaller segment size, say less than 1 gb
+	- More segment will be created per partitions
+	- Log compaction happen more often
+	- BUT kafka must keep more file opened
+		- Sometime throw Error: too many open files
+	- ASK YOURSELF: how fast will I have new segment based on throughput
+	
+- A smaller segment time, say less than 1 week
+	- Set a max frequency for log compaction (more frequent triggers)
+	- Can be set as daily compaction
+	- ASK YOURSELF: how often do I need log compaction to happen
+	
+Log Cleanup Policies
+- Kafka cluster make data expire based on policy
+- Policy 1
+	- log.cleanup.policy=delete (default for all user topic)
+		- Delete based on age of data (Default is 1 week)
+		- Delete based on max size of log (Default is -1 == infinite)
+- Policy 2
+	- log.cleanup.policy=compact (default for topic_consumer_offsets
+		- Delete based on keys of messages
+		- Will delete old duplicate keys after the active segment is committed
+		- Infinite time and space retention
+		
+- Why need?
+	- Delete data from Kafka:
+		- Control size of data on the disk, delete consumed data
+		- Limit  maintenance work on the kafka cluster
+	- How Often?
+		- Log cleanup happens on partition segment
+		- Smaller or more segments mean that log cleanup will happen more often
+		- Log cleanup shouldn't happen too often => take CPU and RAM resources
+		- Cleaner checks for work every 15 second
+			- log.cleaner.backoff.ms
+			
+Log Cleanup Policy: Delete
+	- log.retention.hours:
+		- number of hour to keep data for (default is week == 168)
+		- higher number mean more disk space
+		- lower number mean less data is retain
+			- if consumer down for too long, they will miss data
+		- log.retention.ms (smaller unit has precedence)
+		- log.retention.minuetes (smaller unit has precedence)
+		
+	- log.retention.bytes
+		- Max size in bytes for each partition (default is -1 == infinite)
+		- Useful to keep the size of a log under a threshold
+	- Common use case
+		- One week retention
+			- log.retention.hours = 168
+			- log.retetion.bytes = -1
+		- Infinite time retention bounded by 500 mb
+			- log.retention.ms = -1
+			- log.retention.bytes = 524288000
+			
+Log Cleanup Policy: Compact
+	- Log compaction ensured that your log contains at least the last known value for a specific key within a partition
+	- Very useful if we just require a SNAPSHOT instead of full history (such as for a data table in database)
+	- The idea is that we only keep the latest update for a key in our log
+	- Guarantees
+		- Any consumer that is reading from the tail of a log (most current data) will still see all the messages sent to the topic
+		- Ordering of messages it kept, log compaction only removes some messages, but does not re-order them
+		- The offset of a message is immutable (never changes). Offset are jsut skipped if a message is missing
+		- Deleted records can still be seen by consumer for a period of time	
+			- delete.retention.ms (default is 24 hrs)
+	- Wont prevent from pushing duplicate data to Kafka
+		- De-duplication only done after a segment is committed
+	- Doesn't prevent from reading duplicate data from Kafka
+	- Compact can be failed from time to time
+		- Make sure has enough memory
+		- Restart kafka if log compection is broken
+	- Can't trigger via API
+	- HOW DOES IT WORK??
+		- log.cleanup.policy=compect is impacted by the following
+			- segment.ms (default is 7 days): max amount of time to wait to close active segment
+			- segment.bytes (default is 1G): max size of segment
+			- min.compaction.lag.ms (default is 0): how long to wait before a message can be compacted
+			- delete.retention.ms (default is 24 hrs): wait before deleting data marked for compaction
+			- min.cleanable.dirty.ratio (default is 0.5): higher => less, more efficient cleaning. Lower => opposite
+			
+Unclean Leader Election
+	- unclean.leader.election.enabled
+		- If all in sync replicas go offline (but still have out of sync replicas up). These are available options
+			- Wait for IRS to come back online (default). Topic will be unavailble
+			- Enable unclean.leader.election = true
+				- start procuding to non IRS partition
+	- Improve availability, will lose data because other messages on IRS will be discarded when they come back online and replicate data from new leader
+	- Very dangerous settings
+	- Usecase
+		- Availability is higher priority than data retention
+		
+Large message in KAFKA
+	- Default message is 1 MB per message in topic
+	- If large message, this would become anti-pattern
+	- Option 1
+		- Store large message in external storage outide of kafka
+		- Only send meta-data into kafka, so that consumer will know where to retrieve the data
+	- Option 2
+		- Increase kafka max message size (say 10 mb)
+			- Broker
+				- message.max.bytes=10485880
+			- Topic	
+				- max.message.bytes=10485880
+			- Brokder-wise
+				- replica.fetch.max.bytes=10485880
+			- Consumer-side
+				- max.partition.fetch.bytes=10485880
+			- Producer-side	
+				- max.request.size=10485880
